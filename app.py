@@ -91,6 +91,7 @@ class secondwind(QWidget):
         self.setGeometry(300, 200, 780, 630)
         self.setFixedSize(780, 630)
         self.setStyleSheet("QWidget {background-color: #010b3d}")
+        
 
         buttonfont = QtGui.QFont()
         buttonfont.setPointSize(30)
@@ -125,12 +126,12 @@ class secondwind(QWidget):
                               QPushButton:hover {background-color: #E0E0E0; border: 1px solid rgba(0, 0, 0, 0.5)}""")
         self.Vbuttons.addWidget(self.exitBTN, alignment=Qt.AlignRight)
 
-        # self.RestartBTN = QPushButton("Record Restart")
-        # self.RestartBTN.setMinimumSize(100, 31)
-        # self.RestartBTN.clicked.connect(self.restart)
-        # self.RestartBTN.setStyleSheet("""QPushButton {background-color: #FFFFFF; border: 2px solid rgba(0, 0, 0, 0.3);  color: #030101; border-radius: 5px;} 
-        #                       QPushButton:hover {background-color: #E0E0E0; border: 1px solid rgba(0, 0, 0, 0.5)}""")
-        # self.Vbuttons.addWidget(self.RestartBTN, alignment=Qt.AlignRight)
+        self.RestartBTN = QPushButton("Record Restart")
+        self.RestartBTN.setMinimumSize(100, 31)
+        self.RestartBTN.clicked.connect(self.restart)
+        self.RestartBTN.setStyleSheet("""QPushButton {background-color: #FFFFFF; border: 2px solid rgba(0, 0, 0, 0.3);  color: #030101; border-radius: 5px;} 
+                              QPushButton:hover {background-color: #E0E0E0; border: 1px solid rgba(0, 0, 0, 0.5)}""")
+        self.Vbuttons.addWidget(self.RestartBTN, alignment=Qt.AlignRight)
 
         ## Lables
         self.recordlab = QLabel()
@@ -177,8 +178,8 @@ class secondwind(QWidget):
         if self.current_lab_index == 0:
             self.recordlab.setPixmap(QPixmap.fromImage(qImg))
             self.current_lab_index += 1
-        # elif self.recordlab1.pixmap() is None or self.recordlab1.pixmap().isNull():
-        #     self.recordlab.setPixmap(QPixmap.fromImage(qImg))
+        elif self.recordlab.pixmap() is None or self.recordlab.pixmap().isNull():
+            self.recordlab.setPixmap(QPixmap.fromImage(qImg))
         elif self.current_lab_index == 1:
             self.recordlab1.setPixmap(self.recordlab.pixmap())
             self.recordlab.setPixmap(QPixmap.fromImage(qImg))
@@ -195,16 +196,16 @@ class secondwind(QWidget):
         self.Main = MainWindow()
         self.Main.show()
         self.close()
-    # def restart(self):
-    #     self.current_lab_index = 0
-    #     self.record.stop2()
-    #     if self.recordlab.pixmap() is not None:
-    #         self.recordlab.clear()
-    #     if self.recordlab1.pixmap() is not None:
-    #         self.recordlab1.clear()
-    #     if self.recordlab2.pixmap() is not None:
-    #         self.recordlab2.clear()
-    #     QTimer.singleShot(8000, self.record.start)
+    def restart(self):
+        self.current_lab_index = 0
+        if self.recordlab.pixmap() is not None:
+            self.recordlab.clear()
+        if self.recordlab1.pixmap() is not None:
+            self.recordlab1.clear()
+        if self.recordlab2.pixmap() is not None:
+            self.recordlab2.clear()
+        self.record.stop2()
+        QTimer.singleShot(5000, self.record.start)
 
     def ExitFeed(self):
         QTimer.singleShot(2000, self.record.stop2)
@@ -282,6 +283,7 @@ class record(QThread):
                         continue
                     try:
                         text = ""
+                        time.sleep(3)
                         process, newtext = self.perform_ocr_on_image(img)
                         if newtext != text:
                             ConvertQtFormat = QImage(process.data, process.shape[1], process.shape[0], QImage.Format_RGB888)
@@ -290,10 +292,9 @@ class record(QThread):
                             text = newtext      
                     except Exception as e:
                         print(f"Error processing image: {image_path}\n{e}")
-                    time.sleep(3)
     def stop2(self):
-        self.threadActive = False
-        # self.processingFinished.emit(QImage())
+        self.ThreadActive = False
+        self.terminate()
 
 
 def main():
