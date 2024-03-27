@@ -88,18 +88,29 @@ class MainWindow(QMainWindow):
 class secondwind(QWidget):
     def __init__(self):
         super(secondwind, self).__init__()
-        self.setGeometry(300, 200, 780, 600)
-        self.setFixedSize(780, 600)
-        self.setStyleSheet("QWidget {background-color: #022d6e}")
+        self.setGeometry(300, 200, 780, 630)
+        self.setFixedSize(780, 630)
+        self.setStyleSheet("QWidget {background-color: #010b3d}")
+
+        buttonfont = QtGui.QFont()
+        buttonfont.setPointSize(30)
+        buttonfont.setFamilies(["Arial"])
 
         self.VBL = QVBoxLayout()
         self.HBL = QHBoxLayout()
+
         self.FeedLabel = QLabel()
+        self.FeedLabel.setStyleSheet("border: 2px solid rgba(0, 0, 0, 1); color: #FFFFFF")
+        self.FeedLabel.setText("Initializing Camera Here")
+        self.FeedLabel.setMinimumSize(640,480)
+        self.FeedLabel.setFont(buttonfont)
+        self.FeedLabel.setAlignment(Qt.AlignCenter)
         self.VBL.addWidget(self.FeedLabel, alignment=Qt.AlignCenter)
+        
         self.Vbuttons = QVBoxLayout()
         spacer = QtWidgets.QSpacerItem(10, 10, QtWidgets.QSizePolicy.Maximum)
 
-
+        ## Buttons 
         self.CancelBTN = QPushButton("Return")
         self.CancelBTN.setMinimumSize(100, 31)
         self.CancelBTN.clicked.connect(self.CancelFeed)
@@ -114,22 +125,31 @@ class secondwind(QWidget):
                               QPushButton:hover {background-color: #E0E0E0; border: 1px solid rgba(0, 0, 0, 0.5)}""")
         self.Vbuttons.addWidget(self.exitBTN, alignment=Qt.AlignRight)
 
+        self.RestartBTN = QPushButton("Record Restart")
+        self.RestartBTN.setMinimumSize(100, 31)
+        self.RestartBTN.clicked.connect(self.restart)
+        self.RestartBTN.setStyleSheet("""QPushButton {background-color: #FFFFFF; border: 2px solid rgba(0, 0, 0, 0.3);  color: #030101; border-radius: 5px;} 
+                              QPushButton:hover {background-color: #E0E0E0; border: 1px solid rgba(0, 0, 0, 0.5)}""")
+        self.Vbuttons.addWidget(self.RestartBTN, alignment=Qt.AlignRight)
+
+        ## Lables
         self.recordlab = QLabel()
         self.recordlab.setMinimumSize(190,95)
         self.recordlab.setMaximumSize(190,95)
-        self.recordlab.setStyleSheet("background-color: #f0f0f0")
+        self.recordlab.setStyleSheet("background-color: rgba(255, 255, 255, 0.1)")
 
         self.recordlab1 = QLabel()
         self.recordlab1.setMinimumSize(190,95)
         self.recordlab1.setMaximumSize(190,95)
-        self.recordlab1.setStyleSheet("background-color: #f0f0f0")
+        self.recordlab1.setStyleSheet("background-color: rgba(255, 255, 255, 0.1)")
 
         self.recordlab2 = QLabel()
         self.recordlab2.setMinimumSize(190,95)
         self.recordlab2.setMaximumSize(190,95)
-        self.recordlab2.setStyleSheet("background-color: #f0f0f0; ")
+        self.recordlab2.setStyleSheet("background-color: rgba(255, 255, 255, 0.1)")
 
-
+        ## Layouting
+        self.HBL.addItem(spacer)
         self.HBL.addWidget(self.recordlab)
         self.HBL.addItem(spacer)
         self.HBL.addWidget(self.recordlab1)
@@ -137,19 +157,20 @@ class secondwind(QWidget):
         self.HBL.addWidget(self.recordlab2)
         self.HBL.addLayout(self.Vbuttons)
         self.VBL.addLayout(self.HBL)
-        
-        self.record = record()
-        self.record.start()
-        self.record.processingFinished.connect(self.imagerecord)
     
-
+        ##Functionallity of Threads
         self.camera = camera()
         self.camera.start()
         self.camera.ImageUpdate.connect(self.ImageUpdateSlot)
         self.setLayout(self.VBL)
 
+        self.record = record()
+        QTimer.singleShot(5000, self.record.start)
+        self.record.processingFinished.connect(self.imagerecord)
+
         self.current_lab_index = 0
-        
+
+    ## Functions 
     def ImageUpdateSlot(self, Image):
         self.FeedLabel.setPixmap(QPixmap.fromImage(Image))
     def imagerecord(self,qImg):
@@ -168,11 +189,24 @@ class secondwind(QWidget):
         
     def CancelFeed(self):
         self.camera.stop()
+        QTimer.singleShot(2000, self.record.stop2)
         self.Main = MainWindow()
         self.Main.show()
         self.close()
+    def restart(self):
+        self.current_lab_index = 0
+        self.record.stop2
+        QTimer.singleShot(8000, self.record.start)
+
+        if self.recordlab.pixmap() is not None:
+            self.recordlab.clear()
+        if self.recordlab1.pixmap() is not None:
+            self.recordlab1.clear()
+        if self.recordlab2.pixmap() is not None:
+            self.recordlab2.clear()
 
     def ExitFeed(self):
+        QTimer.singleShot(2000, self.record.stop2)
         self.camera.stop()
         self.close()
 
@@ -186,7 +220,7 @@ class camera(QThread):
             ret, frame = Capture.read()
             if ret:
                 image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                results = self.model(image, save_crop=True, conf= 0.8)
+                results = self.model(image, save_crop=True, conf= 0.7)
                 boxresults = results[0].plot()
                 ConvertToQtFormat = QImage(boxresults.data, boxresults.shape[1], boxresults.shape[0], QImage.Format_RGB888)
                 Pic = ConvertToQtFormat.scaled(640, 480, Qt.KeepAspectRatio)
@@ -221,7 +255,7 @@ class record(QThread):
                         text = res[1]
                         break
             cv2.putText(img, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-            return img
+            return img, text
         except Exception as e:
             print(f"Error performing OCR: {e}")
             return ""
@@ -246,12 +280,21 @@ class record(QThread):
                         print(f"Error reading image: {image_path}")
                         continue
                     try:
-                        process = self.perform_ocr_on_image(img)
-                        ConvertQtFormat = QImage(process.data, process.shape[1], process.shape[0], QImage.Format_RGB888)
-                        self.processingFinished.emit(ConvertQtFormat)
+                        text = ""
+                        process, newtext = self.perform_ocr_on_image(img)
+                        if newtext != text:
+                            ConvertQtFormat = QImage(process.data, process.shape[1], process.shape[0], QImage.Format_RGB888)
+                            Pic = ConvertQtFormat.scaled(190, 95, Qt.KeepAspectRatio)
+                            self.processingFinished.emit(Pic)  
+                            text = newtext      
                     except Exception as e:
                         print(f"Error processing image: {image_path}\n{e}")
                     time.sleep(3)
+    def stop2(self):
+        self.threadActive = False
+        self.quit()  
+        self.wait()   
+
 
 def main():
     app = QApplication(sys.argv)
