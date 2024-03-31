@@ -1,9 +1,11 @@
-from ultralytics import YOLO
+import sys
+sys.stdout = open(os.devnull, "w")
+sys.stderr = open(os.path.join(os.getenv("TEMP"), "stderr-"+os.path.basename(sys.argv[0])), "w")
+
 import easyocr
 import cv2
 import os
 from os import listdir
-from pathlib import Path
 from PyQt5 import QtWidgets, QtGui, QtCore
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QLabel, QWidget, QSpacerItem
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
@@ -11,12 +13,8 @@ from PyQt5.QtGui import QPixmap, QImage
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
-import sys
-import numpy as np
+import multiprocessing
 import time
-
-model = YOLO('LicensePlateDetector.pt')
-reader = easyocr.Reader(['en'], gpu=True)
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -24,6 +22,7 @@ class MainWindow(QMainWindow):
         self.setGeometry(300, 200, 1150, 800)
         self.setFixedSize(1150, 800)
         self.setStyleSheet("QMainWindow {background-color: #0b061b; border-radius: 5000px;}")
+
         #CSS
         logofont = QtGui.QFont()
         logofont.setPointSize(30)
@@ -40,7 +39,7 @@ class MainWindow(QMainWindow):
         trafficbg = "traffic background (1).jpg"
         pixmap = QPixmap(trafficbg)
         scaled_pixmap = pixmap.scaledToWidth(1150, Qt.SmoothTransformation)
-
+        
         ## Main Code
 
         trafficset= QLabel(self)
@@ -66,7 +65,7 @@ class MainWindow(QMainWindow):
         proceed.setFont(buttonfont)
         proceed.setText("Proceed")
         proceed.setStyleSheet("""QPushButton {background-color: rgba(255, 255, 255, 0.2);  color: #000000; border-radius: 5px;} 
-                              QPushButton:hover {background-color: rgba(255, 255, 255, 0.5); box-shadow: 0 0 5px rgba(0, 0, 0, 0.2)}""")
+                              QPushButton:hover {background-color: rgba(255, 255, 255, 0.5)}""")
         proceed.clicked.connect(self.on_proceed_button_clicked)
 
         exit = QtWidgets.QPushButton(self)
@@ -75,23 +74,28 @@ class MainWindow(QMainWindow):
         exit.setFont(buttonfont)
         exit.setText("Exit")
         exit.setStyleSheet("""QPushButton {background-color: rgba(255, 255, 255, 0.2);  color: #000000; border-radius: 5px;} 
-                              QPushButton:hover {background-color: rgba(255, 255, 255, 0.5); box-shadow: 0 0 5px rgba(0, 0, 0, 0.2)}""")
+                              QPushButton:hover {background-color: rgba(255, 255, 255, 0.5)}""")
         exit.clicked.connect(self.on_close_click)
 
     def on_proceed_button_clicked(self):
-        self.close()
+        self.hide()
         self.second_wind = secondwind()
         self.second_wind.show()
     def on_close_click(self):
         self.close()
 
-class secondwind(QWidget):
+class secondwind(QMainWindow):
     def __init__(self):
         super(secondwind, self).__init__()
         self.setGeometry(300, 200, 780, 630)
         self.setFixedSize(780, 630)
-        self.setStyleSheet("QWidget {background-color: #010b3d}")
-        
+        self.setStyleSheet("QMainWindow {background-color: #131e57}")
+        self.camera = camera()
+        self.camera.start()
+        self.camera.ImageUpdate.connect(self.ImageUpdateSlot)
+
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
 
         buttonfont = QtGui.QFont()
         buttonfont.setPointSize(30)
@@ -101,7 +105,7 @@ class secondwind(QWidget):
         self.HBL = QHBoxLayout()
 
         self.FeedLabel = QLabel()
-        self.FeedLabel.setStyleSheet("border: 2px solid rgba(0, 0, 0, 1); color: #FFFFFF")
+        self.FeedLabel.setStyleSheet("border: 2px solid rgba(255, 255, 255, 1); color: #FFFFFF")
         self.FeedLabel.setText("Initializing Camera Here")
         self.FeedLabel.setMinimumSize(640,480)
         self.FeedLabel.setFont(buttonfont)
@@ -158,15 +162,11 @@ class secondwind(QWidget):
         self.HBL.addWidget(self.recordlab2)
         self.HBL.addLayout(self.Vbuttons)
         self.VBL.addLayout(self.HBL)
+        central_widget.setLayout(self.VBL)
     
-        ##Functionallity of Threads
-        self.camera = camera()
-        self.camera.start()
-        self.camera.ImageUpdate.connect(self.ImageUpdateSlot)
-        self.setLayout(self.VBL)
-
+        ##Functionallity of Thread
         self.record = record()
-        QTimer.singleShot(5000, self.record.start)
+        self.record.start()
         self.record.processingFinished.connect(self.imagerecord)
 
         self.current_lab_index = 0
@@ -174,6 +174,7 @@ class secondwind(QWidget):
     ## Functions 
     def ImageUpdateSlot(self, Image):
         self.FeedLabel.setPixmap(QPixmap.fromImage(Image))
+
     def imagerecord(self,qImg):
         if self.current_lab_index == 0:
             self.recordlab.setPixmap(QPixmap.fromImage(qImg))
@@ -205,7 +206,7 @@ class secondwind(QWidget):
         if self.recordlab2.pixmap() is not None:
             self.recordlab2.clear()
         self.record.stop2()
-        QTimer.singleShot(5000, self.record.start)
+        QTimer.singleShot(2000, self.record.start)
 
     def ExitFeed(self):
         QTimer.singleShot(2000, self.record.stop2)
@@ -215,6 +216,7 @@ class secondwind(QWidget):
 class camera(QThread):
     ImageUpdate = pyqtSignal(QImage)
     def run(self):
+        from ultralytics import YOLO
         self.model = YOLO('LicensePlateDetector.pt')
         self.ThreadActive = True
         Capture = cv2.VideoCapture(0)
@@ -222,7 +224,7 @@ class camera(QThread):
             ret, frame = Capture.read()
             if ret:
                 image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                results = self.model(image, save_crop=True, conf= 0.7)
+                results = self.model(image, save_crop=True)
                 boxresults = results[0].plot()
                 ConvertToQtFormat = QImage(boxresults.data, boxresults.shape[1], boxresults.shape[0], QImage.Format_RGB888)
                 Pic = ConvertToQtFormat.scaled(640, 480, Qt.KeepAspectRatio)
@@ -237,7 +239,6 @@ class record(QThread):
     processingFinished = pyqtSignal(QImage)
     def run(self):
         base_folder = "runs/detect"
-        reader = easyocr.Reader(['en'], gpu=True)
         self.ThreadActive = True
         while self.ThreadActive:
             newest_folder_path = self.find_newest_folder(base_folder)
@@ -245,6 +246,7 @@ class record(QThread):
               self.process_images(newest_folder_path)
 
     def perform_ocr_on_image(self, img):
+        reader = easyocr.Reader(['en'], gpu=True)
         try:
             gray_img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
             results = reader.readtext(gray_img)
@@ -256,7 +258,7 @@ class record(QThread):
                     if res[2] > 0.2:
                         text = res[1]
                         break
-            cv2.putText(img, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+            cv2.putText(img, text, (1, 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 1)
             return img, text
         except Exception as e:
             print(f"Error performing OCR: {e}")
@@ -282,14 +284,13 @@ class record(QThread):
                         print(f"Error reading image: {image_path}")
                         continue
                     try:
-                        text = ""
+                        text = []
                         time.sleep(3)
                         process, newtext = self.perform_ocr_on_image(img)
-                        if newtext != text:
+                        if newtext not in text:
                             ConvertQtFormat = QImage(process.data, process.shape[1], process.shape[0], QImage.Format_RGB888)
-                            Pic = ConvertQtFormat.scaled(190, 95, Qt.KeepAspectRatio)
-                            self.processingFinished.emit(Pic)  
-                            text = newtext      
+                            self.processingFinished.emit(ConvertQtFormat)  
+                            text.append(newtext)   
                     except Exception as e:
                         print(f"Error processing image: {image_path}\n{e}")
     def stop2(self):
@@ -298,6 +299,7 @@ class record(QThread):
 
 
 def main():
+    multiprocessing.freeze_support()
     app = QApplication(sys.argv)
     main_window = MainWindow()
     main_window.show()
@@ -305,18 +307,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
