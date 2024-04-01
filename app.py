@@ -1,7 +1,8 @@
 import sys
-sys.stdout = open(os.devnull, "w")
-sys.stderr = open(os.path.join(os.getenv("TEMP"), "stderr-"+os.path.basename(sys.argv[0])), "w")
+# sys.stdout = open(os.devnull, "w")
+# sys.stderr = open(os.path.join(os.getenv("TEMP"), "stderr-"+os.path.basename(sys.argv[0])), "w")
 
+from ultralytics import YOLO
 import easyocr
 import cv2
 import os
@@ -13,7 +14,6 @@ from PyQt5.QtGui import QPixmap, QImage
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
-import multiprocessing
 import time
 
 class MainWindow(QMainWindow):
@@ -90,9 +90,6 @@ class secondwind(QMainWindow):
         self.setGeometry(300, 200, 780, 630)
         self.setFixedSize(780, 630)
         self.setStyleSheet("QMainWindow {background-color: #131e57}")
-        self.camera = camera()
-        self.camera.start()
-        self.camera.ImageUpdate.connect(self.ImageUpdateSlot)
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -165,8 +162,13 @@ class secondwind(QMainWindow):
         central_widget.setLayout(self.VBL)
     
         ##Functionallity of Thread
+       
+        self.camera = camera()
+        self.camera.start()
+        self.camera.ImageUpdate.connect(self.ImageUpdateSlot)
+
         self.record = record()
-        self.record.start()
+        QTimer.singleShot(2000, self.record.start)
         self.record.processingFinished.connect(self.imagerecord)
 
         self.current_lab_index = 0
@@ -216,7 +218,6 @@ class secondwind(QMainWindow):
 class camera(QThread):
     ImageUpdate = pyqtSignal(QImage)
     def run(self):
-        from ultralytics import YOLO
         self.model = YOLO('LicensePlateDetector.pt')
         self.ThreadActive = True
         Capture = cv2.VideoCapture(0)
@@ -224,7 +225,7 @@ class camera(QThread):
             ret, frame = Capture.read()
             if ret:
                 image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                results = self.model(image, save_crop=True)
+                results = self.model(image, save_crop=True, conf= 0.7)
                 boxresults = results[0].plot()
                 ConvertToQtFormat = QImage(boxresults.data, boxresults.shape[1], boxresults.shape[0], QImage.Format_RGB888)
                 Pic = ConvertToQtFormat.scaled(640, 480, Qt.KeepAspectRatio)
@@ -299,7 +300,6 @@ class record(QThread):
 
 
 def main():
-    multiprocessing.freeze_support()
     app = QApplication(sys.argv)
     main_window = MainWindow()
     main_window.show()
