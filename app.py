@@ -8,12 +8,13 @@ import cv2
 import os
 from os import listdir
 from PyQt5 import QtWidgets, QtGui, QtCore
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QLabel, QWidget, QSpacerItem
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QLabel, QWidget, QSpacerItem, QTextEdit
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QEvent
 from PyQt5.QtGui import QPixmap, QImage
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
+import multiprocessing
 import time
 
 class MainWindow(QMainWindow):
@@ -87,32 +88,56 @@ class MainWindow(QMainWindow):
 class secondwind(QMainWindow):
     def __init__(self):
         super(secondwind, self).__init__()
-        self.setGeometry(300, 200, 780, 630)
-        self.setFixedSize(780, 630)
+        self.setGeometry(300, 200, 790, 630)
+        self.setFixedSize(790, 630)
         self.setStyleSheet("QMainWindow {background-color: #131e57}")
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
-        buttonfont = QtGui.QFont()
-        buttonfont.setPointSize(30)
-        buttonfont.setFamilies(["Arial"])
+        initfont = QtGui.QFont()
+        initfont.setPointSize(30)
+        initfont.setFamilies(["Arial"])
 
         self.VBL = QVBoxLayout()
         self.HBL = QHBoxLayout()
-
-        self.FeedLabel = QLabel()
-        self.FeedLabel.setStyleSheet("border: 2px solid rgba(255, 255, 255, 1); color: #FFFFFF")
-        self.FeedLabel.setText("Initializing Camera Here")
-        self.FeedLabel.setMinimumSize(640,480)
-        self.FeedLabel.setFont(buttonfont)
-        self.FeedLabel.setAlignment(Qt.AlignCenter)
-        self.VBL.addWidget(self.FeedLabel, alignment=Qt.AlignCenter)
-        
-        self.Vbuttons = QVBoxLayout()
+        self.FeedHbl = QHBoxLayout()
         spacer = QtWidgets.QSpacerItem(10, 10, QtWidgets.QSizePolicy.Maximum)
 
+        ## Camera Label
+        self.FeedLabel = QLabel()
+        self.FeedLabel.setStyleSheet("color: #FFFFFF")
+        self.FeedLabel.setText("Initializing Camera Here")
+        self.FeedLabel.setMinimumSize(640,480)
+        self.FeedLabel.setFont(initfont)
+        self.FeedLabel.setAlignment(Qt.AlignCenter)
+        self.FeedHbl.addWidget(self.FeedLabel, alignment=Qt.AlignLeft)
+        self.FeedHbl.addItem(spacer)
+        self.VBL.addLayout(self.FeedHbl)
+
+        ## Text Label
+        self.TextList = QVBoxLayout()
+        self.TextList.setSpacing(0)
+        self.HeaderText = QLabel()
+        self.HeaderText.setMinimumSize(120,50)
+        self.HeaderText.setMaximumSize(120,50)
+        self.HeaderText.setStyleSheet("color: #FFFFFF; font-size: 25px; font-family: Helvetica; ")
+        self.HeaderText.setWordWrap(True)
+        self.HeaderText.setText("Plate Numbers :")
+        self.TextList.addWidget(self.HeaderText, alignment=Qt.AlignCenter)
+
+        self.TextPlace = QLabel()
+        self.TextPlace.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        self.TextPlace.setMinimumSize(120,400)
+        self.TextPlace.setMaximumSize(120,400)
+        self.TextPlace.setStyleSheet("color: #FFFFFF; font-size: 20px; font-family: Helvetica") 
+        self.TextList.addWidget(self.TextPlace, alignment=Qt.AlignCenter)
+        self.counter = 1
+
+        self.FeedHbl.addLayout(self.TextList)
+
         ## Buttons 
+        self.Vbuttons = QVBoxLayout()
         self.CancelBTN = QPushButton("Return")
         self.CancelBTN.setMinimumSize(100, 31)
         self.CancelBTN.clicked.connect(self.CancelFeed)
@@ -134,21 +159,21 @@ class secondwind(QMainWindow):
                               QPushButton:hover {background-color: #E0E0E0; border: 1px solid rgba(0, 0, 0, 0.5)}""")
         self.Vbuttons.addWidget(self.RestartBTN, alignment=Qt.AlignRight)
 
-        ## Lables
+        ## Image Lables
         self.recordlab = QLabel()
         self.recordlab.setMinimumSize(190,95)
         self.recordlab.setMaximumSize(190,95)
-        self.recordlab.setStyleSheet("background-color: rgba(255, 255, 255, 0.1)")
+        self.recordlab.setStyleSheet("background-color: rgba(255, 255, 255, 0.1); border-radius: 5px")
 
         self.recordlab1 = QLabel()
         self.recordlab1.setMinimumSize(190,95)
         self.recordlab1.setMaximumSize(190,95)
-        self.recordlab1.setStyleSheet("background-color: rgba(255, 255, 255, 0.1)")
+        self.recordlab1.setStyleSheet("background-color: rgba(255, 255, 255, 0.1); border-radius: 5px")
 
         self.recordlab2 = QLabel()
         self.recordlab2.setMinimumSize(190,95)
         self.recordlab2.setMaximumSize(190,95)
-        self.recordlab2.setStyleSheet("background-color: rgba(255, 255, 255, 0.1)")
+        self.recordlab2.setStyleSheet("background-color: rgba(255, 255, 255, 0.1); border-radius: 5px")
 
         ## Layouting
         self.HBL.addItem(spacer)
@@ -170,10 +195,11 @@ class secondwind(QMainWindow):
         self.record = record()
         QTimer.singleShot(2000, self.record.start)
         self.record.processingFinished.connect(self.imagerecord)
+        self.record.processtext.connect(self.TextSlot)
 
         self.current_lab_index = 0
 
-    ## Functions 
+    ## Qthread Signals
     def ImageUpdateSlot(self, Image):
         self.FeedLabel.setPixmap(QPixmap.fromImage(Image))
 
@@ -192,10 +218,18 @@ class secondwind(QMainWindow):
             self.recordlab1.setPixmap(self.recordlab.pixmap())
             self.recordlab.setPixmap(QPixmap.fromImage(qImg))
             self.current_lab_index = 2
-        
+
+    def TextSlot(self, Text):
+        current_text = self.TextPlace.text()
+        new_text = current_text + "\n" + str(self.counter) + ". " + Text
+        self.TextPlace.setText(new_text)
+        self.counter += 1
+
+    ## Button Functions
     def CancelFeed(self):
         self.camera.stop()
         QTimer.singleShot(2000, self.record.stop2)
+        self.counter = 1
         self.Main = MainWindow()
         self.Main.show()
         self.close()
@@ -207,6 +241,9 @@ class secondwind(QMainWindow):
             self.recordlab1.clear()
         if self.recordlab2.pixmap() is not None:
             self.recordlab2.clear()
+        if self.TextPlace.text() != "":
+            self.TextPlace.clear()
+            self.counter = 1
         self.record.stop2()
         QTimer.singleShot(2000, self.record.start)
 
@@ -214,6 +251,7 @@ class secondwind(QMainWindow):
         QTimer.singleShot(2000, self.record.stop2)
         self.camera.stop()
         self.close()
+
 
 class camera(QThread):
     ImageUpdate = pyqtSignal(QImage)
@@ -238,7 +276,9 @@ class camera(QThread):
 
 class record(QThread):
     processingFinished = pyqtSignal(QImage)
+    processtext = pyqtSignal(str)
     def run(self):
+        self.text = []
         base_folder = "runs/detect"
         self.ThreadActive = True
         while self.ThreadActive:
@@ -285,13 +325,14 @@ class record(QThread):
                         print(f"Error reading image: {image_path}")
                         continue
                     try:
-                        text = []
                         time.sleep(3)
                         process, newtext = self.perform_ocr_on_image(img)
-                        if newtext not in text:
+                        if newtext not in self.text:
                             ConvertQtFormat = QImage(process.data, process.shape[1], process.shape[0], QImage.Format_RGB888)
-                            self.processingFinished.emit(ConvertQtFormat)  
-                            text.append(newtext)   
+                            scaled = ConvertQtFormat.scaled(190, 95, Qt.KeepAspectRatio)
+                            self.processingFinished.emit(scaled)
+                            self.processtext.emit(newtext)
+                            self.text.append(newtext)   
                     except Exception as e:
                         print(f"Error processing image: {image_path}\n{e}")
     def stop2(self):
@@ -300,6 +341,7 @@ class record(QThread):
 
 
 def main():
+    multiprocessing.freeze_support()
     app = QApplication(sys.argv)
     main_window = MainWindow()
     main_window.show()
